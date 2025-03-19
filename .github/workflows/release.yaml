@@ -1,0 +1,54 @@
+name: Create Release
+on:
+    push:
+        tags:
+            - 'v*.*.*'
+permissions:
+    contents: write
+jobs:
+    build-and-release:
+        strategy:
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+                arch: [amd64, arm64]
+                include:
+                    - os: ubuntu-latest
+                      platform: linux
+                    - os: macos-latest
+                      platform: darwin
+                    - os: windows-latest
+                      platform: windows
+                      ext: .exe
+                exclude:
+                    - os: windows-latest
+                      arch: arm64
+        runs-on: ${{ matrix.os }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Set up Go
+              uses: actions/setup-go@v4
+              with:
+                  go-version: '1.21'
+            - name: Extract version from tag
+              id: get_version
+              shell: bash
+              run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+            - name: Build binary
+              env:
+                  GOOS: ${{ matrix.platform }}
+                  GOARCH: ${{ matrix.arch }}
+              run: |
+                  go build -ldflags "-X github.com/noamstrauss/ota-updater/version.Version=${{ env.VERSION }}" -o ota-updater-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }} .
+            - name: Upload release binary as artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.platform }}-${{ matrix.arch }}-release
+                  path: |
+                      ota-updater-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+            - name: Upload to GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  name: v${{ env.VERSION }}
+                  files: |
+                      ota-updater-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
