@@ -1,14 +1,7 @@
-
 APP_NAME := ota-updater
-VERSION := 0.8.0
-SERVER_NAME := update-server
+VERSION := 0.2.0
 BUILD_DIR := ./build
-RELEASES_DIR := ./releases
 
-# Build flags
-GO := go
-LDFLAGS := -ldflags "-X github.com/noamstrauss/ota-updater/version.Version=$(VERSION)"
-# Platform detection
 ifeq ($(OS),Windows_NT)
 	PLATFORM := windows
 	BIN_EXT := .exe
@@ -25,41 +18,48 @@ endif
 
 ARCH := $(shell go env GOARCH)
 BIN_NAME := $(APP_NAME)$(BIN_EXT)
-SERVER_BIN := $(SERVER_NAME)$(BIN_EXT)
 
-#.PHONY: all clean build run-app run-server release
-.PHONY: all clean build run-app release
+.PHONY: clean build run build-run help release tag
 
-all: build
+help:
+	@echo "Available targets:"
+	@echo "  build      - Build the application"
+	@echo "  run        - Run the application (build if necessary)"
+	@echo "  build-run  - Build and then run the application"
+	@echo "  clean      - Remove build artifacts"
+	@echo "  release    - Create a release build for current platform"
+	@echo "  tag        - Create a git tag for the current version"
+	@echo "  release-tag - Create and push a git tag to trigger GitHub workflow"
+	@echo "  help       - Show this help message"
 
-#build: build-app build-server
-build: build-app
-build-app:
+build:
 	@echo "Building application..."
 	@mkdir -p $(BUILD_DIR)
-	$(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BIN_NAME) .
+	go build -ldflags "-X github.com/noamstrauss/ota-updater/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(BIN_NAME) .
 
-#build-server:
-#	@echo "Building update server..."
-#	@mkdir -p $(BUILD_DIR)
-#	$(GO) build -o $(BUILD_DIR)/$(SERVER_BIN) ./server
-
-run-app:
+run: $(BUILD_DIR)/$(BIN_NAME)
 	@echo "Running application..."
-#	$(BUILD_DIR)/$(BIN_NAME) --update-url="http://localhost:8080"
 	$(BUILD_DIR)/$(BIN_NAME)
 
-#run-server: build-server
-#	@echo "Running update server on port 8080..."
-#	$(BUILD_DIR)/$(SERVER_BIN) --port=8080 --releases-dir=$(RELEASES_DIR)
+$(BUILD_DIR)/$(BIN_NAME):
+	@$(MAKE) build
 
-# Create a new release
-#release: build-app
-#	@echo "Creating release $(VERSION) for $(PLATFORM)/$(ARCH)..."
-#	@mkdir -p $(RELEASES_DIR)/$(PLATFORM)/$(ARCH)
-#	@cp $(BUILD_DIR)/$(BIN_NAME) $(RELEASES_DIR)/$(PLATFORM)/$(ARCH)/$(VERSION).bin
-#	@echo "Release created. Upload it to the server using:"
-#	@echo "curl -F \"platform=$(PLATFORM)\" -F \"arch=$(ARCH)\" -F \"version=$(VERSION)\" -F \"binary=@$(RELEASES_DIR)/$(PLATFORM)/$(ARCH)/$(VERSION).bin\" http://localhost:8080/upload"
+build-run: clean build run
+
+release:
+	@echo "Creating release build for $(PLATFORM)/$(ARCH)..."
+	@mkdir -p $(BUILD_DIR)/release
+	GOOS=$(PLATFORM) GOARCH=$(ARCH) go build -ldflags "-X github.com/noamstrauss/ota-updater/version.Version=$(VERSION) -s -w" -o $(BUILD_DIR)/release/$(APP_NAME)-$(VERSION)-$(PLATFORM)-$(ARCH)$(BIN_EXT) .
+
+tag:
+	@echo "Creating git tag $(VERSION)..."
+	@git tag -a $(VERSION) -m "$(VERSION)"
+	@echo "Tag created locally. To push this tag and trigger a release workflow, run: git push origin $(VERSION)"
+
+release-tag: tag
+	@echo "Pushing git tag $(VERSION)..."
+	@git push origin $(VERSION)
+	@echo "Tag pushed. GitHub Actions workflow should start automatically to build the release."
 
 clean:
 	@echo "Cleaning up..."
